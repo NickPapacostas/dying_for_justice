@@ -18,25 +18,24 @@ const zoom = d3.zoom().scaleExtent([.2, 5]).on('zoom', (event) => {
   g.attr('stroke-width', 1 / transform.k)
 })
 
-  function loadAirtableData() {
-    return fetch("https://api.airtable.com/v0/appIo1lqaLGrB5dLz/Table%201?maxRecords=100&view=Grid%20view", {
-      headers: new Headers({
-        "Authorization": `Bearer keyiUyROsiT6hATuI`
-      })
-    }).then( response => {
-      return response.json().then( jailPopPerCap => {
-        return jailPopPerCap.records.map( (r) => {
-          return {
-            state: r.fields.State,
-            jailPop: r.fields["Jail Population per capita"],
-            avgDailyPop: r.fields["Average number of people in jail"],
-            mortalityRate: r.fields["Mortality Rate"]
-          }
-        })
+const loadAirtableData = () => {
+  return fetch("https://api.airtable.com/v0/appIo1lqaLGrB5dLz/Table%201?maxRecords=100&view=Grid%20view", {
+    headers: new Headers({
+      "Authorization": `Bearer keyiUyROsiT6hATuI`
+    })
+  }).then( response => {
+    return response.json().then( jailPopPerCap => {
+      return jailPopPerCap.records.map( (r) => {
+        return {
+          state: r.fields.State,
+          jailPop: r.fields["Jail Population per capita"],
+          avgDailyPop: r.fields["Average number of people in jail"],
+          mortalityRate: r.fields["Mortality Rate"]
+        }
       })
     })
-  }
-
+  })
+}
 
 svg.call(zoom);
 
@@ -46,8 +45,12 @@ Promise.all([
   loadAirtableData()
 ]).then(([us, statesData, popData]) => {
   const projection = d3.geoAlbersUsa()
-    .scale(500)
+    .scale(800)
     .translate([width/2, height/2]);
+
+  const tooltip = d3.select("#map-view").append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
 
   const path = d3.geoPath().projection(projection)
   const states = g.append("g")
@@ -100,8 +103,35 @@ Promise.all([
     return colorScale(d.jailPopPerCap)
   }
 
+  const stateHTML = (d) => {
+    return `
+      <div class="state-details">
+        <h3 class="w3-opacity">${d.name} </h3>
+        <div>
+          <h3 class="state-stat">
+            Mortaility rate per 100,000:
+          </h3>
+          ${d.mortalityRate}
+        </div>
+        <div>
+          <h3 class="state-stat">
+            Jail Population per 100,000:
+          </h3>
+          ${d.jailPopPerCap}
+        </div>
+        <div>
+          <h3 class="state-stat">
+            Number of people held in jails on an average day:
+          </h3>
+          ${parseInt(d.avgDailyPop).toLocaleString()}
+        </div>
+        <div><a class="w3-button button-border" "document.getElementById('more-data-modal').style.display='block'"> More data </a></div>
+      </div>
+    `
+  }
+
+
   function clicked(event, d) {
-    console.log(d)
     const [[x0, y0], [x1, y1]] = path.bounds(d);
     event.stopPropagation();
     states.transition().style("fill", null);
@@ -110,9 +140,14 @@ Promise.all([
       zoom.transform,
       d3.zoomIdentity
         .translate(width / 2, height / 2)
-        .scale(Math.min(8, 0.9 / Math.max((x1 - x0) / width, (y1 - y0) / height)))
+        .scale(2)
         .translate(-(x0 + x1) / 2, -(y0 + y1) / 2),
       d3.pointer(event, svg.node())
     );
+
+    tooltip.transition()
+        .duration(500)
+        .style("opacity", .9);
+    tooltip.html(stateHTML(d))
   }
 })
